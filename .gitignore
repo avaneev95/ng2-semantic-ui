@@ -1,7 +1,6 @@
 # See http://help.github.com/ignore-files/ for more about ignoring files.
 
 # compiled output
-/dist
 /tmp
 
 ## ngc logs
@@ -32,16 +31,6 @@ testem.log
 .DS_Store
 Thumbs.db
 
-# non TS files
-*.d.ts
-*.metadata.json
-*.js
-*.js.map
-
 # build scripts
 !scripts/**/*
 !package.js
-
-# output files
-demo/dist
-bundles
