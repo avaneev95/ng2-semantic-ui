@@ -8,6 +8,7 @@ export declare class SuiPopup implements IPopup {
     config: TemplatePopupConfig<any>;
     transitionController: TransitionController;
     positioningService: PositioningService;
+    private _anchor;
     private _isOpen;
     closingTimeout: number;
     onOpen: EventEmitter<void>;

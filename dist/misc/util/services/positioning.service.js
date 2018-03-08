@@ -70,41 +70,11 @@ function popperToPlacement(popper) {
 }
 var PositioningService = (function () {
     function PositioningService(anchor, subject, placement, arrowSelector) {
-        var _this = this;
         this.anchor = anchor;
         this.subject = subject;
         this._placement = placement;
-        var modifiers = {
-            computeStyle: {
-                gpuAcceleration: false
-            },
-            preventOverflow: {
-                escapeWithReference: true,
-                boundariesElement: document.body
-            },
-            arrow: {
-                element: arrowSelector
-            },
-            offset: {
-                fn: function (data) {
-                    if (_this._hasArrow) {
-                        var offsets = _this.calculateOffsets();
-                        data.offsets.popper.left += offsets.left;
-                        data.offsets.popper.top += offsets.top;
-                    }
-                    return data;
-                }
-            }
-        };
-        if (!arrowSelector) {
-            delete modifiers.arrow;
-        }
-        this._popper = new Popper(anchor.nativeElement, subject.nativeElement, {
-            placement: placementToPopper(placement),
-            modifiers: modifiers,
-            onCreate: function (initial) { return _this._popperState = initial; },
-            onUpdate: function (update) { return _this._popperState = update; }
-        });
+        this._arrowSelector = arrowSelector;
+        this.init();
     }
     Object.defineProperty(PositioningService.prototype, "placement", {
         get: function () {
@@ -112,7 +82,9 @@ var PositioningService = (function () {
         },
         set: function (placement) {
             this._placement = placement;
-            this._popper.options.placement = placementToPopper(placement);
+            if (this._popper) {
+                this._popper.options.placement = placementToPopper(placement);
+            }
         },
         enumerable: true,
         configurable: true
@@ -141,6 +113,46 @@ var PositioningService = (function () {
         enumerable: true,
         configurable: true
     });
+    PositioningService.prototype.init = function () {
+        var _this = this;
+        var modifiers = {
+            computeStyle: {
+                gpuAcceleration: false
+            },
+            preventOverflow: {
+                escapeWithReference: true,
+                boundariesElement: document.body
+            },
+            arrow: {
+                element: this._arrowSelector
+            },
+            offset: {
+                fn: function (data) {
+                    if (_this._hasArrow) {
+                        var offsets = _this.calculateOffsets();
+                        data.offsets.popper.left += offsets.left;
+                        data.offsets.popper.top += offsets.top;
+                    }
+                    return data;
+                }
+            }
+        };
+        if (!this._arrowSelector) {
+            delete modifiers.arrow;
+        }
+        this._popper = new Popper(this.anchor.nativeElement, this.subject.nativeElement, {
+            placement: placementToPopper(this._placement),
+            modifiers: modifiers,
+            onCreate: function (initial) { return _this._popperState = initial; },
+            onUpdate: function (update) { return _this._popperState = update; }
+        });
+    };
+    PositioningService.prototype.update = function () {
+        this._popper.update();
+    };
+    PositioningService.prototype.destroy = function () {
+        this._popper.destroy();
+    };
     PositioningService.prototype.calculateOffsets = function () {
         var left = 0;
         var top = 0;
@@ -167,12 +179,6 @@ var PositioningService = (function () {
             }
         }
         return { top: top, left: left, width: 0, height: 0 };
-    };
-    PositioningService.prototype.update = function () {
-        this._popper.update();
-    };
-    PositioningService.prototype.destroy = function () {
-        this._popper.destroy();
     };
     return PositioningService;
 }());

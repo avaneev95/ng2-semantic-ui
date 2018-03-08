@@ -4109,41 +4109,11 @@ function popperToPlacement(popper) {
 }
 var PositioningService = (function () {
     function PositioningService(anchor, subject, placement, arrowSelector) {
-        var _this = this;
         this.anchor = anchor;
         this.subject = subject;
         this._placement = placement;
-        var modifiers = {
-            computeStyle: {
-                gpuAcceleration: false
-            },
-            preventOverflow: {
-                escapeWithReference: true,
-                boundariesElement: document.body
-            },
-            arrow: {
-                element: arrowSelector
-            },
-            offset: {
-                fn: function (data) {
-                    if (_this._hasArrow) {
-                        var offsets = _this.calculateOffsets();
-                        data.offsets.popper.left += offsets.left;
-                        data.offsets.popper.top += offsets.top;
-                    }
-                    return data;
-                }
-            }
-        };
-        if (!arrowSelector) {
-            delete modifiers.arrow;
-        }
-        this._popper = new Popper(anchor.nativeElement, subject.nativeElement, {
-            placement: placementToPopper(placement),
-            modifiers: modifiers,
-            onCreate: function (initial) { return _this._popperState = initial; },
-            onUpdate: function (update) { return _this._popperState = update; }
-        });
+        this._arrowSelector = arrowSelector;
+        this.init();
     }
     Object.defineProperty(PositioningService.prototype, "placement", {
         get: function () {
@@ -4151,7 +4121,9 @@ var PositioningService = (function () {
         },
         set: function (placement) {
             this._placement = placement;
-            this._popper.options.placement = placementToPopper(placement);
+            if (this._popper) {
+                this._popper.options.placement = placementToPopper(placement);
+            }
         },
         enumerable: true,
         configurable: true
@@ -4180,6 +4152,46 @@ var PositioningService = (function () {
         enumerable: true,
         configurable: true
     });
+    PositioningService.prototype.init = function () {
+        var _this = this;
+        var modifiers = {
+            computeStyle: {
+                gpuAcceleration: false
+            },
+            preventOverflow: {
+                escapeWithReference: true,
+                boundariesElement: document.body
+            },
+            arrow: {
+                element: this._arrowSelector
+            },
+            offset: {
+                fn: function (data) {
+                    if (_this._hasArrow) {
+                        var offsets = _this.calculateOffsets();
+                        data.offsets.popper.left += offsets.left;
+                        data.offsets.popper.top += offsets.top;
+                    }
+                    return data;
+                }
+            }
+        };
+        if (!this._arrowSelector) {
+            delete modifiers.arrow;
+        }
+        this._popper = new Popper(this.anchor.nativeElement, this.subject.nativeElement, {
+            placement: placementToPopper(this._placement),
+            modifiers: modifiers,
+            onCreate: function (initial) { return _this._popperState = initial; },
+            onUpdate: function (update) { return _this._popperState = update; }
+        });
+    };
+    PositioningService.prototype.update = function () {
+        this._popper.update();
+    };
+    PositioningService.prototype.destroy = function () {
+        this._popper.destroy();
+    };
     PositioningService.prototype.calculateOffsets = function () {
         var left = 0;
         var top = 0;
@@ -4206,12 +4218,6 @@ var PositioningService = (function () {
             }
         }
         return { top: top, left: left, width: 0, height: 0 };
-    };
-    PositioningService.prototype.update = function () {
-        this._popper.update();
-    };
-    PositioningService.prototype.destroy = function () {
-        this._popper.destroy();
     };
     return PositioningService;
 }());
@@ -8858,8 +8864,7 @@ exports.SuiPopup = (function () {
     });
     Object.defineProperty(SuiPopup.prototype, "anchor", {
         set: function (anchor) {
-            // Whenever the anchor is set (which is when the popup is created), recreate the positioning service with the appropriate options.
-            this.positioningService = new PositioningService(anchor, this._container.element, this.config.placement, ".dynamic.arrow");
+            this._anchor = anchor;
         },
         enumerable: true,
         configurable: true
@@ -8867,9 +8872,8 @@ exports.SuiPopup = (function () {
     Object.defineProperty(SuiPopup.prototype, "direction", {
         // Returns the direction (`top`, `left`, `right`, `bottom`) of the current placement.
         get: function () {
-            if (this.positioningService) {
-                return this.positioningService.actualPlacement.split(" ").shift();
-            }
+            // We need to set direction attribute before popper init to allow correct positioning
+            return this.config.placement.split(" ").shift();
         },
         enumerable: true,
         configurable: true
@@ -8877,9 +8881,7 @@ exports.SuiPopup = (function () {
     Object.defineProperty(SuiPopup.prototype, "alignment", {
         // Returns the alignment (`top`, `left`, `right`, `bottom`) of the current placement.
         get: function () {
-            if (this.positioningService) {
-                return this.positioningService.actualPlacement.split(" ").pop();
-            }
+            return this.config.placement.split(" ").pop();
         },
         enumerable: true,
         configurable: true
@@ -8916,6 +8918,9 @@ exports.SuiPopup = (function () {
         if (!this.isOpen) {
             // Cancel the closing timer.
             clearTimeout(this.closingTimeout);
+            // Create positioning service before transition started
+            this.positioningService = new PositioningService(this._anchor, this._container.element, this.config.placement, ".dynamic.arrow");
+            this.positioningService.hasArrow = !this.config.isBasic;
             // Cancel all other transitions, and initiate the opening transition.
             this.transitionController.stopAll();
             this.transitionController.animate(new Transition(this.config.transition, this.config.transitionDuration, exports.TransitionDirection.In, function () {
@@ -8928,10 +8933,6 @@ exports.SuiPopup = (function () {
                     setTimeout(function () { return autoFocus.focus(); }, _this.config.transitionDuration);
                 }
             }));
-            // Refresh the popup position after a brief delay to allow for browser processing time.
-            this.positioningService.placement = this.config.placement;
-            this.positioningService.hasArrow = !this.config.isBasic;
-            setTimeout(function () { return _this.positioningService.update(); });
             // Finally, set the popup to be open.
             this._isOpen = true;
             this.onOpen.emit();
@@ -8985,7 +8986,7 @@ __decorate$25([
 exports.SuiPopup = __decorate$25([
     _angular_core.Component({
         selector: "sui-popup",
-        template: "\n<div class=\"ui popup\"\n     [ngClass]=\"dynamicClasses\"\n     [suiTransition]=\"transitionController\"\n     [attr.direction]=\"direction\"\n     #container>\n\n    <ng-container *ngIf=\"!config.template && (!!config.header || !!config.text)\">\n        <div class=\"header\" *ngIf=\"config.header\">{{ config.header }}</div>\n        <div class=\"content\">{{ config.text }}</div>\n    </ng-container>\n    <div #templateSibling></div>\n\n    <sui-popup-arrow *ngIf=\"!config.isBasic\"\n                     [placement]=\"positioningService.actualPlacement\"\n                     [inverted]=\"config.isInverted\"></sui-popup-arrow>\n</div>\n",
+        template: "\n<div class=\"ui popup\"\n     [ngClass]=\"dynamicClasses\"\n     [suiTransition]=\"transitionController\"\n     [attr.direction]=\"direction\"\n     #container>\n\n    <ng-container *ngIf=\"!config.template && (!!config.header || !!config.text)\">\n        <div class=\"header\" *ngIf=\"config.header\">{{ config.header }}</div>\n        <div class=\"content\">{{ config.text }}</div>\n    </ng-container>\n    <div #templateSibling></div>\n\n    <sui-popup-arrow *ngIf=\"!config.isBasic\"\n                     [placement]=\"positioningService?.actualPlacement\"\n                     [inverted]=\"config.isInverted\"></sui-popup-arrow>\n</div>\n",
         styles: ["\n.ui.popup {\n    /* Autofit popup to the contents. */\n    right: auto;\n    margin: 0;\n}\n\n.ui.animating.popup {\n    /* When the popup is animating, it may not initially be in the correct position.\n       This fires a mouse event, causing the anchor's mouseleave to fire - making the popup flicker.\n       Setting pointer-events to none while animating fixes this bug. */\n    pointer-events: none;\n}\n\n.ui.popup::before {\n    /* Hide the Semantic UI CSS arrow. */\n    display: none;\n}\n\n/* Offset popup by 0.75em above and below when placed 'vertically'. */\n.ui.popup[direction=\"top\"],\n.ui.popup[direction=\"bottom\"] {\n    margin-top: 0.75em;\n    margin-bottom: 0.75em;\n}\n\n/* Offset popup by 0.75em either side when placed 'horizontally'. */\n.ui.popup[direction=\"left\"],\n.ui.popup[direction=\"right\"] {\n    margin-left: 0.75em;\n    margin-right: 0.75em;\n}\n"]
     }),
     __metadata$17("design:paramtypes", [_angular_core.ElementRef])
